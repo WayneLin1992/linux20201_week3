@@ -5,6 +5,7 @@
 
 #define LARGE_STRING_LEN 256
 
+//#include "intern.h"
 typedef union {
     /* allow strings up to 15 bytes to stay on the stack
      * use the last byte as a null terminator and to store flags
@@ -21,7 +22,6 @@ typedef union {
           space_left : 4,
             /* if it is on heap, set to 1 */
             is_ptr : 1, is_large_string : 1, flag2 : 1, flag3 : 1;
-            int : 0;
     };
 
     /* heap allocated */
@@ -125,6 +125,7 @@ xs *xs_new(xs *x, const void *p)
     } else {
         memcpy(x->filler, p, len);
         x->space_left = 15 - (len - 1);
+        //x->size = len-1;
     }
     return x;
 }
@@ -146,19 +147,20 @@ xs *xs_grow(xs *x, size_t len)
 
     if (len <= xs_capacity(x))
         return x;
-
-    /* Backup first */
     if (!xs_is_ptr(x))
         memcpy(buf, x->filler, 16);
-
-    x->is_ptr = true;
-    x->capacity = ilog2(len) + 1;
-
-    if (xs_is_ptr(x)) {
+    /* Backup first */
+    if(len < LARGE_STRING_LEN){
+        x->is_ptr = true;
+        x->capacity = ilog2(len) + 1;
+        if (xs_is_ptr(x)) {
+            xs_allocate_data(x, len, 1);
+        }
+    }else{
+        x->is_ptr = true;
+        x->is_large_string = true;
+        x->capacity = ilog2(len) + 1;
         xs_allocate_data(x, len, 1);
-    } else {
-        xs_allocate_data(x, len, 0);
-        memcpy(xs_data(x), buf, 16);
     }
     return x;
 }
@@ -271,5 +273,43 @@ xs *xs_trim(xs *x, const char *trimset)
     return x;
 #undef check_bit
 #undef set_bit
+}
+
+static xs* xs_cow_copy_long(xs* src){
+    xs* dest = malloc(sizeof(xs));
+    if(!xs_is_ptr(src)){
+         *dest =  *src;
+    }else if(src->is_large_string){
+        dest->capacity = src->capacity;
+        dest->size = src->size;
+        dest->is_large_string = src->is_large_string;
+        dest->ptr = src->ptr;
+        xs_inc_refcnt(src);
+        xs_set_refcnt(dest, 1);
+    }else{
+        dest->capacity = src->capacity;
+        dest->is_ptr = src->is_ptr;
+        dest->size = src->size;
+        size_t len = xs_size(src) + 1;
+        xs_allocate_data(dest, len, 0);
+        char *dest_data  = malloc(len*sizeof(char));
+        strncpy(dest_data, xs_data(src), len);
+        dest->ptr = dest_data;
+    }
+    return dest;
+}
+
+bool xs_cow_write_long(xs*src, char *data){
+    if(!xs_is_large_string(src))
+        return false;
+    if(strlen(data) < LARGE_STRING_LEN)
+        return false;
+    char* data2 = malloc(strlen(data)*sizeof(char)+4);
+    memcpy(data2+4,data, strlen(data));
+    data2[strlen(data)+4] = '\0';
+    src->ptr = data2;
+    xs_set_refcnt(src, 1);
+    src->size = strlen(data);
+    return true;
 }
 #endif // FBSTRING_H_INCLUDED
