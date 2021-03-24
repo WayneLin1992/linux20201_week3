@@ -19,17 +19,23 @@ int main(){
     int  i  =0;
     //char* str = malloc(300*sizeof(char));
     //fprintf(fp1,"count\tlist_sort(merge)\n");
-    for( i=0; i<50; i++){
+    char* str = malloc(300*sizeof(char));
+    while (fgets(str,300, fp) != NULL){
+        //printf("%s", str);
         struct timespec time_start;
         struct timespec time_end;
         long during = 0;
-        char* str = malloc(300*sizeof(char));
         fscanf(fp, "%[^\n]", str);
+        //printf("%s \n",str);
         clock_gettime(CLOCK_MONOTONIC, &time_start);
         xs string = *xs_tmp(str);
-        xs_free(&string);
+        //printf("[%s] : %2zu\n", xs_data(&string), xs_size(&string));
         //printf("Data from the file:\n%s", str);
         clock_gettime(CLOCK_MONOTONIC, &time_end);
+        free(str);
+        str = malloc(300*sizeof(char));
+        i++;
+        xs_free(&string);
         during = time_end.tv_nsec - time_start.tv_nsec;
         fprintf(fp1 ,"%d\t%ld \n",i,during);
     }

@@ -20,13 +20,13 @@ int main(){
     ofstream myfile;
     myfile.open ("cppstringcd.txt");
     string str;
-    //string file_contents;
+    string file_contents;
     int i = 0;
     while (getline(ifs, str))
     {
         clock_gettime(CLOCK_MONOTONIC, &start);
-        str = "\0";
-        //delete file_contents;
+        //str = "\0";
+        file_contents = str;
         //file_contents.push_back('\n');
         clock_gettime(CLOCK_MONOTONIC, &end);
         long time_taken = end.tv_nsec - start.tv_nsec;
