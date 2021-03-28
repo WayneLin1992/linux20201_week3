@@ -97,6 +97,10 @@ static void xs_allocate_data(xs *x, size_t len, bool reallocate)
 {
     /* Medium string */
     if (len < LARGE_STRING_LEN) {
+        if(reallocate){
+            char* tmp = x->ptr;
+            free(tmp);
+        }
         x->ptr = reallocate ? realloc(x->ptr, (size_t) 1 << x->capacity)
                             : malloc((size_t) 1 << x->capacity);
         return;
@@ -106,6 +110,10 @@ static void xs_allocate_data(xs *x, size_t len, bool reallocate)
     x->is_large_string = 1;
 
     /* The extra 4 bytes are used to store the reference count */
+    if(reallocate){
+        char* tmp = x->ptr;
+        free(tmp);
+    }
     x->ptr = reallocate ? realloc(x->ptr, (size_t)(1 << x->capacity) + 4)
                         : malloc((size_t)(1 << x->capacity) + 4);
 
@@ -174,6 +182,12 @@ static inline xs *xs_newempty(xs *x)
 static inline xs *xs_free(xs *x)
 {
     if (xs_is_ptr(x) && xs_dec_refcnt(x) <= 0)
+        free(x->ptr);
+    return xs_newempty(x);
+}
+
+static inline xs *xs_free_must(xs *x){
+    if(xs_is_ptr(x))
         free(x->ptr);
     return xs_newempty(x);
 }
@@ -283,9 +297,10 @@ static xs* xs_cow_copy_long(xs* src){
         dest->capacity = src->capacity;
         dest->size = src->size;
         dest->is_large_string = src->is_large_string;
-        dest->ptr = src->ptr;
         xs_inc_refcnt(src);
-        xs_set_refcnt(dest, 1);
+        dest->ptr = xs_data(src);
+//       xs_inc_refcnt(src);
+//        xs_set_refcnt(dest, 1);
     }else{
         dest->capacity = src->capacity;
         dest->is_ptr = src->is_ptr;
@@ -296,8 +311,10 @@ static xs* xs_cow_copy_long(xs* src){
         strncpy(dest_data, xs_data(src), len);
         dest->ptr = dest_data;
     }
-    return dest;
+    return dest, src;
 }
+
+
 
 bool xs_cow_write_long(xs*src, char *data){
     if(!xs_is_large_string(src))
@@ -311,5 +328,24 @@ bool xs_cow_write_long(xs*src, char *data){
     xs_set_refcnt(src, 1);
     src->size = strlen(data);
     return true;
+}
+
+static xs *xs_cow_copy(xs *des, xs *src) {
+    if (!xs_is_ptr(src)) {
+        *des = *src;
+    } else if (xs_is_large_string(src)) {
+        des->capacity = src->capacity;
+        des->is_ptr   = src->is_ptr;
+        des->size     = src->size;
+        xs_inc_refcnt(src);
+        des->ptr = xs_data(src);
+    } else {
+        des->capacity = src->capacity;
+        des->is_ptr   = src->is_ptr;
+        des->size     = src->size;
+        size_t len = xs_size(src) + 1;
+        xs_allocate_data(des, len, 0);
+        memcpy(xs_data(des), xs_data(src), len);
+    }
 }
 #endif // FBSTRING_H_INCLUDED
